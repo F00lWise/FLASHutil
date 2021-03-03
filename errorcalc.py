@@ -157,9 +157,18 @@ def ratio_with_error_uncorrelated(x,y,xerr,yerr):
     comberr[valid] = np.abs(X[valid]/Y[[valid]])*np.sqrt( (XERR[valid]/X[valid])**2 + (YERR[valid]/Y[valid])**2)
     return ratio, comberr
 
+"""
+# This seems wrong
 def difference_with_error(x,y,xerr,yerr):
     diff = x-y
     comberr = np.sqrt((x**2)*(xerr**2) + \
                       (y**2)*(yerr**2)) -\
                         2*x*y*np.corrcoef(x,y)[0,1]*xerr*yerr# Error Propagation for division, using covariance calculated from correlation coefficient
     return diff, comberr
+    
+# Better for uncorrelated:
+    def difference_with_error(x,y,xerr,yerr):
+        diff = x-y
+        comberr = np.sqrt((xerr**2) + (yerr**2))
+        return diff, comberr
+"""
