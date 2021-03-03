@@ -294,16 +294,16 @@ class FLASHmes:
             plt.imshow( peak_energies, aspect = "auto")
 
         return peak_energies
-    
+
 class loadedFLASHmes(FLASHmes):
-    def __init__(self, loadfilename):
+    def __init__(self, loadfilename, skipchannels =[]):
         print('Loading from file: '.format(loadfilename))
         # Define Attributes
         thelib = dd.io.load(loadfilename)
         
         for key in thelib.keys():
            # print(f"Loading key: {key}.")
-            setattr(self, key, thelib[key])
+            if not key in skipchannels:
+                setattr(self, key, thelib[key])
         
         print('Successfully loaded Runs {}'.format(self._loaded_runs))  
-
