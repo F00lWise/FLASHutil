@@ -188,6 +188,11 @@ def nm2eV(nm):
     nu = c/wl
     E = 4.13566769692386e-15*nu    
     return E
+def eV2nm(eV):
+    nu = eV/4.13566769692386e-15
+    c = 299792458
+    wl = c/nu
+    return wl*1e9
 
 def save_dict_to_txt(fname, lib):
     # Saves a dictionary of 1d arrays of the same size to a txt file
@@ -583,3 +588,92 @@ def fancy_errplot(axis, x, y, yerr, smootheness = 2, lab = None, empty = False, 
     if 'marker' in plotopts: del plotopts['marker']
     if not 'alpha' in plotopts: plotopts['alpha'] = 0.5
     axis.fill_between(x, upper,lower, **plotopts)
+    
+def mask_cosmics(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:,:], plot = True, Nsigma_average = None):
+    """
+    image_stack, excluded_region, hitlist = mask_cosmics(image_stack, kernel_size = (3,1), Nsigma = 10,\
+        roi = np.s_[:,:], plot = True, Nsigma_average= None)
+    
+    This function masks outliers in a given 3D array <image_stack> with images in dimensions (1,2).
+    This is done by comparing each image with its smoothed counterpart.
+    Smoothing is done by convoluting with a box function with a kernel of <kernel_size>
+    Outliers that deviate more than <Nsigma> from the smoothed version are  masked.
+    Regions outside of the <roi> (2D, valid for each image) are disregarded and never masked
+    As this algorithm can fail around regions with high intensities (e.g. elastic peaks),\
+    the same procedure is first done on an average_image with a lower sigma tolerance of <Nsigma_average>.
+    Pixels that are found to deviate in the average image are disregarded and never masked
+    
+    Parameters:
+        image_stack: AxBxC sized stack of A images (3D np.array or np.ma.array)
+        kernel_size: size of the smoothing kernel (2D tuple of integers)
+        Nsigma: max allowed deviation from smoothed images (float)
+        roi: disregard anything outside this 2d slice (np.s_ 2D slice object)
+        plot: show debug plots (bool)
+        Nsigma_average: max allowed deviation for average image from smoothed images (float)
+    Returns:
+        image_stack: the input image stack, but as a masked array with cosmics masked (3D np.ma.array)
+        excluded_region: Mask of what the algorithm disregarded (2D boolean array)
+        hitlist: indices of all images where cosmics were found (1D np.array)
+    """
+    print(f'Begin Cosmic masking.')
+    
+    stack_mask = np.ones(image_stack.shape, dtype = bool)
+    roi_excluded_region = np.ones((image_stack.shape[1],image_stack.shape[2]),dtype = bool)
+    roi_excluded_region[roi] = False
+    
+    kernel = np.ones(kernel_size)
+    if Nsigma_average is None:
+        Nsigma_average = Nsigma/3
+
+    def mask_image(image, kernel, Nsigma, excluded_region = None):
+        im_sm = sc.ndimage.convolve(image, kernel, mode = 'nearest')/np.sum(kernel)
+        diff = np.abs(image - im_sm )
+        deviation = np.std(diff)
+        hits = diff>Nsigma*deviation
+        if excluded_region is not None:
+            hits[excluded_region] = False
+        return hits
+
+    # First, I see where already the average image has outliers.
+    # These are computed for half the sigmas to make sure
+    avgim = np.nanmean(image_stack[np.any(image_stack,(1,2))],0)
+    peak_excluded_region = mask_image(avgim,kernel = kernel, Nsigma = Nsigma_average, excluded_region= roi_excluded_region)
+    excluded_region = peak_excluded_region | roi_excluded_region
+    
+    if plot:
+        fig, axes = plt.subplots(3,1,constrained_layout = True)
+        fig.suptitle('Cosmic Correction')
+        plt.sca(axes[0])
+        plt.title('Average Image')
+        plt.imshow(avgim.T, aspect='auto', alpha = 1)
+        plt.sca(axes[1])
+        plt.imshow(roi_excluded_region.T, aspect='auto', alpha = .7, cmap = 'Blues')
+        plt.imshow(peak_excluded_region.T, aspect='auto', alpha = .3, cmap = 'Reds')
+        plt.title(f'Blue: Excluded by ROI, Red: Excluded due to peaks')
+
+    print(f'Computed peak region to exclude from algorith, containing {np.sum(peak_excluded_region)} pixel.\n \
+          furthermore, {np.sum(roi_excluded_region)} pixel are not in the given ROI')
+    
+    # Now we iterate through the stack and make masks,
+    # keeping track in the hitlist of where cosmits were detected (which events)
+    hitlist = []
+    Nskipped = 0
+    for i, im in enumerate(image_stack):
+        if not np.any(image_stack[i]):# any point not equal origin makes sure that empty images are omitted
+            Nskipped += 1
+            continue
+            
+        stack_mask[i] = mask_image(im, kernel, Nsigma, excluded_region=excluded_region)
+        if np.any(stack_mask[i]):
+            hitlist.append(i)
+            
+    print(f'Skipped {Nskipped} empty images.')
+    print(f'Found cosmics in {len(hitlist)} out of {len(image_stack)} images.')
+
+    image_stack = np.ma.array(data= image_stack, mask = stack_mask)
+    
+    if plot:
+        plt.sca(axes[2])
+        plt.title('Where cosmics were found')
+        plt.imshow(np.sum(stack_mask,0).T, aspect='auto', cmap = 'binary')
+    return image_stack, excluded_region, hitlist
