@@ -91,7 +91,7 @@ def smooth(y, pts):
 
 def shift_by_n(vec,n):
     """ Shift a vector by an even number of elements """
-    res = np.zeros(vec.shape[0])*np.nan
+    res = np.zeros(vec.shape)*np.nan
     if n>0:
         res[:n] = np.nan
         res[n:] = vec[:-n]
