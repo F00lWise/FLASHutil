@@ -591,8 +591,7 @@ def fancy_errplot(axis, x, y, yerr, smootheness = 2, lab = None, empty = False, 
     
 def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:,:], plot = True, Nsigma_average = None):
     """
-    image_stack, excluded_region, hitlist = cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10,\
-        roi = np.s_[:,:], plot = True, Nsigma_average= None)
+    image_stack, excluded_region, hitlist = cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:,:], plot = True, Nsigma_average= None)
     
     This function masks outliers in a given 3D array <image_stack> with images in dimensions (1,2).
     This is done by comparing each image with its smoothed counterpart.
