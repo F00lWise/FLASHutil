@@ -639,7 +639,10 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
     # First, I see where already the average image has outliers.
     # These are computed for half the sigmas to make sure
     avgim = np.nanmean(image_stack[np.any(image_stack,(1,2))],0)
-    peak_excluded_region = mask_image(avgim,kernel = kernel, Nsigma = Nsigma_average, excluded_region= roi_excluded_region)
+    peak_excluded_region_raw = mask_image(avgim,kernel = kernel, Nsigma = Nsigma_average, excluded_region= roi_excluded_region)
+    ## Smooth the peak excluded region with the kernel
+    peak_excluded_region_sm = sc.ndimage.convolve(np.array(peak_excluded_region_raw,dtype=float), kernel, mode = 'nearest')
+    peak_excluded_region = peak_excluded_region_sm>(3/np.sum(kernel)) # more than 3 pixel within the kernel triggered in the avgim
     excluded_region = peak_excluded_region | roi_excluded_region
     
     if plot:
@@ -677,5 +680,5 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
     if plot:
         plt.sca(axes[2])
         plt.title('Where cosmics were found')
-        plt.imshow(np.sum(stack_mask,0).T, aspect='auto', cmap = 'binary')
+        plt.imshow(np.sum(stack_mask[np.any(image_stack,(1,2))],0).T, aspect='auto', cmap = 'binary')
     return image_stack, excluded_region, hitlist
