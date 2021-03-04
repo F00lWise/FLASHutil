@@ -650,7 +650,7 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
         plt.imshow(peak_excluded_region.T, aspect='auto', alpha = .3, cmap = 'Reds')
         plt.title(f'Blue: Excluded by ROI, Red: Excluded due to peaks')
 
-    print(f'Computed peak region to exclude from algorith, containing {np.sum(peak_excluded_region)} pixel.\n \
+    print(f'Computed peak region to exclude from algorithm, containing {np.sum(peak_excluded_region)} pixel.\n \
           furthermore, {np.sum(roi_excluded_region)} pixel are not in the given ROI')
     
     # Now we iterate through the stack and make masks,
