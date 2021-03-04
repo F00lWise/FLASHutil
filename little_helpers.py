@@ -694,5 +694,5 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
     if plot:
         plt.sca(axes[2])
         plt.title('Where cosmics were found')
-        plt.imshow(np.sum(stack_mask[np.any(image_stack,(1,2))],0).T, aspect='auto', cmap = 'binary', norm = LogNorm())
+        plt.imshow(np.sum(stack_mask[np.any(image_stack,(1,2))],0).T, aspect='auto', cmap = 'binary')#, norm = LogNorm())
     return image_stack, excluded_region, hitlist
