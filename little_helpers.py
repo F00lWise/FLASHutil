@@ -194,7 +194,7 @@ def eV2nm(eV):
     wl = c/nu
     return wl*1e9
 
-def save_dict_to_txt(fname, lib):
+def save_dict_to_txt(fname, lib, header = None):
     # Saves a dictionary of 1d arrays of the same size to a txt file
     keys = list(lib.keys())
     savearr1 = np.zeros((len(lib[keys[0]])+1,len(keys)))
@@ -202,7 +202,10 @@ def save_dict_to_txt(fname, lib):
     for i,k in enumerate(lib.keys()):
         head = head + ' ' + k
         savearr1[1:,i] = lib[k]
-    np.savetxt(fname, savearr1, header=head) 
+    if header is not None:
+        np.savetxt(fname, savearr1, header=header+'\n'+head) 
+    else:
+        np.savetxt(fname, savearr1, header = head) 
 
 def plot_fft(sig,f_s=0.1, xaxis='freq'):
     from scipy import fftpack
