@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 import scipy as sc
 import scipy.ndimage
 import scipy.signal
@@ -592,9 +593,9 @@ def fancy_errplot(axis, x, y, yerr, smootheness = 2, lab = None, empty = False, 
     if not 'alpha' in plotopts: plotopts['alpha'] = 0.5
     axis.fill_between(x, upper,lower, **plotopts)
     
-def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:,:], plot = True, Nsigma_average = None):
+def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:,:], plot = True, Nsigma_average = None, fill_by_average = False, exclude_no_peaks = False):
     """
-    image_stack, excluded_region, hitlist = cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:,:], plot = True, Nsigma_average= None)
+    image_stack, excluded_region, hitlist = cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:,:], plot = True, Nsigma_average= None, fill_by_average = False, exclude_no_peaks = False))
     
     This function masks outliers in a given 3D array <image_stack> with images in dimensions (1,2).
     This is done by comparing each image with its smoothed counterpart.
@@ -612,6 +613,8 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
         roi: disregard anything outside this 2d slice (np.s_ 2D slice object)
         plot: show debug plots (bool)
         Nsigma_average: max allowed deviation for average image from smoothed images (float)
+        fill_by_average: If set to true, a regular numpy array is returned instead of a masked one and cosmic pixels are assigned the average value of the image.
+        exclude_no_peaks: If set to true, no pixels are excluded from the cosmic masking process.
     Returns:
         image_stack: the input image stack, but as a masked array with cosmics masked (3D np.ma.array)
         excluded_region: Mask of what the algorithm disregarded (2D boolean array)
@@ -639,11 +642,16 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
     # First, I see where already the average image has outliers.
     # These are computed for half the sigmas to make sure
     avgim = np.nanmean(image_stack[np.any(image_stack,(1,2))],0)
-    peak_excluded_region_raw = mask_image(avgim,kernel = kernel, Nsigma = Nsigma_average, excluded_region= roi_excluded_region)
-    ## Smooth the peak excluded region with the kernel
-    peak_excluded_region_sm = sc.ndimage.convolve(np.array(peak_excluded_region_raw,dtype=float), kernel, mode = 'nearest')
-    peak_excluded_region = peak_excluded_region_sm>(3/np.sum(kernel)) # more than 3 pixel within the kernel triggered in the avgim
-    excluded_region = peak_excluded_region | roi_excluded_region
+    
+    if exclude_no_peaks:
+        peak_excluded_region = np.zeros((image_stack.shape[1],image_stack.shape[2]),dtype = bool) # Just for having the variable (plotting error catch)
+        excluded_region = roi_excluded_region
+    else:
+        peak_excluded_region_raw = mask_image(avgim,kernel = kernel, Nsigma = Nsigma_average, excluded_region= roi_excluded_region)
+        ## Smooth the peak excluded region with the kernel
+        peak_excluded_region_sm = sc.ndimage.convolve(np.array(peak_excluded_region_raw,dtype=float), kernel, mode = 'nearest')
+        peak_excluded_region = peak_excluded_region_sm>(3/np.sum(kernel)) # more than 3 pixel within the kernel triggered in the avgim
+        excluded_region = peak_excluded_region | roi_excluded_region
     
     if plot:
         fig, axes = plt.subplots(3,1,constrained_layout = True)
@@ -671,14 +679,20 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
         stack_mask[i] = mask_image(im, kernel, Nsigma, excluded_region=excluded_region)
         if np.any(stack_mask[i]):
             hitlist.append(i)
+        if fill_by_average:
+            median = np.median(np.ma.array(data=im,mask= stack_mask[i]))
+            image_stack[i][stack_mask[i]==True] = median
+            #= np.ma.fix_invalid(im, mask = stack_mask[i], copy = False, fill_value = median)
             
     print(f'Skipped {Nskipped} empty images.')
-    print(f'Found cosmics in {len(hitlist)} out of {len(image_stack)} images.')
-
-    image_stack = np.ma.array(data= image_stack, mask = stack_mask)
+    print(f'Found cosmics in {len(hitlist)} out of {len(image_stack[np.any(image_stack,(1,2))])} non-empty images.')
+    if fill_by_average:
+        print(f'Pixels with cosmics where set to the image mean value.')
+    else:
+        image_stack = np.ma.array(data= image_stack, mask = stack_mask)
     
     if plot:
         plt.sca(axes[2])
         plt.title('Where cosmics were found')
-        plt.imshow(np.sum(stack_mask[np.any(image_stack,(1,2))],0).T, aspect='auto', cmap = 'binary')
+        plt.imshow(np.sum(stack_mask[np.any(image_stack,(1,2))],0).T, aspect='auto', cmap = 'binary')#, norm = LogNorm())
     return image_stack, excluded_region, hitlist
