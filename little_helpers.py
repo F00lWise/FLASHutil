@@ -593,9 +593,9 @@ def fancy_errplot(axis, x, y, yerr, smootheness = 2, lab = None, empty = False, 
     if not 'alpha' in plotopts: plotopts['alpha'] = 0.5
     axis.fill_between(x, upper,lower, **plotopts)
     
-def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:,:], plot = True, Nsigma_average = None, fill_by_average = False, exclude_no_peaks = False, average_image_by = 'mean'):
+def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:,:], plot = True, Nsigma_average = None, fill_by_average = False, exclude_no_peaks = False, average_image_by = 'median'):
     """
-    image_stack, excluded_region, hitlist = cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:,:], plot = True, Nsigma_average= None, fill_by_average = False, exclude_no_peaks = False, average_image_by = 'mean')
+    image_stack, excluded_region, hitlist = cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:,:], plot = True, Nsigma_average= None, fill_by_average = False, exclude_no_peaks = False, average_image_by = 'median')
     
     This function masks outliers in a given 3D array <image_stack> with images in dimensions (1,2).
     This is done by comparing each image with its smoothed counterpart.
@@ -634,8 +634,8 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
         Nsigma_average = Nsigma/3
 
     def mask_image(image, kernel, Nsigma, excluded_region = None):
-        im_sm = sc.ndimage.uniform_filter(image,kernel_size, mode = 'nearest')
-        diff = np.abs(image - im_sm )
+        im_sm = sc.ndimage.uniform_filter(np.array(image,dtype=float),size=kernel_size, mode = 'nearest')
+        diff = np.abs(image - im_sm)
         deviation = np.std(diff)
         hits = diff>Nsigma*deviation
         if excluded_region is not None:
@@ -667,7 +667,7 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
         fig, axes = plt.subplots(2,1,constrained_layout = True)
         fig.suptitle('Cosmic Correction')
         plt.sca(axes[0])
-        plt.title('Average Image and where cosmics were found')
+        plt.title('Average Image (Blue) and where cosmics were found (Red)')
         plt.imshow(avgim.T, aspect='auto', alpha = 1, cmap = 'Blues')
         plt.sca(axes[1])
         plt.imshow(roi_excluded_region.T, aspect='auto', alpha = .7, cmap = 'Blues')
@@ -705,5 +705,5 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
         plt.sca(axes[0])
         found_image = np.nansum(np.array(stack_mask[non_empty],dtype=float),0).T
         found_image[found_image==0] = np.nan
-        plt.imshow(found_image, aspect='auto', cmap = 'Reds',vmin = 0, vmax = 10)#, norm = LogNorm())
+        plt.imshow(found_image, aspect='auto', cmap = 'Reds',vmin = 0, vmax = 5)#, norm = LogNorm())
     return image_stack, excluded_region, hitlist
