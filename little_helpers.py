@@ -634,6 +634,12 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
         Nsigma_average = Nsigma/3
 
     def mask_image(image, kernel, Nsigma, excluded_region = None):
+        nan_problem = False
+        if np.any(np.isnan(image)):
+            nan_problem = True
+            nanmask = np.isnan(image)
+            avg = np.nanmedian(image)
+            image[nanmask] = avg
         im_sm = sc.ndimage.uniform_filter(np.array(image,dtype=float),size=kernel_size, mode = 'nearest')
         diff = np.abs(image - im_sm)
         deviation = np.nanstd(diff)
