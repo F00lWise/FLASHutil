@@ -646,8 +646,8 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
         hits = diff>Nsigma*deviation
         if excluded_region is not None:
             hits[excluded_region] = False
-	if nan_problem:
-	    image[nanmask] = np.nan
+        if nan_problem:
+            image[nanmask] = np.nan
         return hits
 
     # First, I see where already the average image has outliers.
