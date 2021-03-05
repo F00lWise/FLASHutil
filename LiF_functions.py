@@ -73,13 +73,13 @@ def get_meslist_nokwargs(runlist, bkg_run_no,calib, t0, beamblocked_pix, Npulses
     #Background
     bkgmes = getmes(bkg_run_no,Npulses,channels,daqAccess)
     print('Mask cosmics in Background Run')
-    bkg_images, _, _ = lh.cosmics_masking(bkgmes.images, kernel_size = (4,2), Nsigma = 10,roi = np.s_[2:,:], plot = False)
+    bkg_images, _, _ = lh.cosmics_masking(bkgmes.images, kernel_size = (4,2), Nsigma = 10,roi = np.s_[2:,:], plot = True, exclude_no_peaks = True)
     mes.bkgim = np.mean(bkg_images[bkgmes.good],0)
     
     print('Mask cosmics of actual_data Run')
     mes.images, mes.cosmic_excluded_region, mes.images_with_masked_cosmics =\
         lh.cosmics_masking(mes.images, kernel_size = (4,2), Nsigma = 10,roi = np.s_[3:,:], plot = True)
-    mes.images = mes.images-mes.bkgim
+    mes.images[mes.good] = mes.images[mes.good]-mes.bkgim
 
     return mes
 
