@@ -636,7 +636,7 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
     def mask_image(image, kernel, Nsigma, excluded_region = None):
         im_sm = sc.ndimage.uniform_filter(np.array(image,dtype=float),size=kernel_size, mode = 'nearest')
         diff = np.abs(image - im_sm)
-        deviation = np.std(diff)
+        deviation = np.nanstd(diff)
         hits = diff>Nsigma*deviation
         if excluded_region is not None:
             hits[excluded_region] = False
@@ -660,7 +660,7 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
         peak_excluded_region_raw = mask_image(avgim,kernel = kernel, Nsigma = Nsigma_average, excluded_region= roi_excluded_region)
         ## Smooth the peak excluded region with the kernel
         peak_excluded_region_sm = sc.ndimage.convolve(np.array(peak_excluded_region_raw,dtype=float), kernel, mode = 'nearest')
-        peak_excluded_region = peak_excluded_region_sm>(3/np.sum(kernel)) # more than 3 pixel within the kernel triggered in the avgim
+        peak_excluded_region = peak_excluded_region_sm>(3/np.nansum(kernel)) # more than 3 pixel within the kernel triggered in the avgim
         excluded_region = peak_excluded_region | roi_excluded_region
     
     if plot:
@@ -674,8 +674,8 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
         plt.imshow(peak_excluded_region.T, aspect='auto', alpha = .3, cmap = 'Reds')
         plt.title(f'Blue: Excluded by ROI, Red: Excluded due to peaks')
 
-    print(f'Computed peak region to exclude from algorithm, containing {np.sum(peak_excluded_region)} pixel.\n \
-          furthermore, {np.sum(roi_excluded_region)} pixel are not in the given ROI')
+    print(f'Computed peak region to exclude from algorithm, containing {np.nansum(peak_excluded_region)} pixel.\n \
+          furthermore, {np.nansum(roi_excluded_region)} pixel are not in the given ROI')
     
     # Now we iterate through the stack and make masks,
     # keeping track in the hitlist of where cosmits were detected (which events)
