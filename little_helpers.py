@@ -703,7 +703,7 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
             #= np.ma.fix_invalid(im, mask = stack_mask[i], copy = False, fill_value = median)
             
     print(f'Skipped {Nskipped} empty images.')
-    print(f'Found cosmics in {len(hitlist)} out of {len(image_stack[non_empty])} non-empty images.')
+    print(f'Found {np.sum(stack_mask)} cosmics in {len(hitlist)} out of {len(image_stack[non_empty])} non-empty images.')
     if fill_by_average:
         print(f'Pixels with cosmics where set to the image mean value.')
     else:
