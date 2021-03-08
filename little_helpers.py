@@ -178,10 +178,12 @@ def simeq(a,b,d):
     return np.abs(a-b)<d
 
 def within(a, inter):
-    if a>=inter[0] and a <= inter[1]:
-        return True
-    else:
-        return False
+    """
+    checks if <a> is between the tuple inter(left sided)
+    """
+    intersort = np.sort(inter)
+    a = np.array(a)
+    return (a>=intersort[0])&(a<intersort[1])
     
 def nm2eV(nm):
     wl = nm/1e9
@@ -703,7 +705,7 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
             #= np.ma.fix_invalid(im, mask = stack_mask[i], copy = False, fill_value = median)
             
     print(f'Skipped {Nskipped} empty images.')
-    print(f'Found {np.sum(stack_mask)} cosmics in {len(hitlist)} out of {len(image_stack[non_empty])} non-empty images.')
+    print(f'Found {np.sum(stack_mask[non_empty])} cosmics in {len(hitlist)} out of {len(image_stack[non_empty])} non-empty images.')
     if fill_by_average:
         print(f'Pixels with cosmics where set to the image mean value.')
     else:
