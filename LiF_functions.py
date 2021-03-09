@@ -3,6 +3,8 @@ import numpy as np
 import little_helpers as lh
 from matplotlib import pyplot as plt
 import warnings
+
+
 def getmes(run, Npulses, channels,daqAccess):
     if type(run) is int:
         runNo = run
@@ -59,6 +61,9 @@ def get_meslist_nokwargs(runlist, bkg_run_no,calib, t0, beamblocked_pix, Npulses
     mes.first_pix = first_pix
     mes.last_pix= last_pix
     mes.image_cutoff = image_cutoff
+    image_mask = np.ones(mes.images.shape,dtype=bool)
+    image_mask[mes.good,image_cutoff,:] = False
+    mes.images = np.ma.array(data = mes.images, mask = image_mask,dtype=np.float32)
     mes.bkgRunNo = bkg_run_no
 
     mes.binning = binning
@@ -73,16 +78,33 @@ def get_meslist_nokwargs(runlist, bkg_run_no,calib, t0, beamblocked_pix, Npulses
     #Background
     bkgmes = getmes(bkg_run_no,Npulses,channels,daqAccess)
     print('Mask cosmics in Background Run')
-    bkg_images, _, _ = lh.cosmics_masking(bkgmes.images, kernel_size = (4,2), Nsigma = 10,roi = np.s_[2:,:], plot = True, exclude_no_peaks = True)
+    bkg_images, _, _ = lh.cosmics_masking(bkgmes.images, kernel_size = (5,3), Nsigma = 10,Nsigma_average=5,\
+                            roi = np.s_[image_cutoff.start:image_cutoff.stop,:], plot = True, exclude_no_peaks = True)
     mes.bkgim = np.mean(bkg_images[bkgmes.good],0)
     
+    
+    ### Image pretreatment
     print('Mask cosmics of actual_data Run')
     mes.images, mes.cosmic_excluded_region, mes.images_with_masked_cosmics =\
-        lh.cosmics_masking(mes.images, kernel_size = (4,2), Nsigma = 10,roi = np.s_[3:,:], plot = True)
+        lh.cosmics_masking(mes.images, kernel_size = (5,3), Nsigma = 10,Nsigma_average=5,
+                           roi = np.s_[image_cutoff.start:image_cutoff.stop,:], plot = True)
+    # bkg subtraction
     mes.images[mes.good] = mes.images[mes.good]-mes.bkgim
+    
+    # calibration
+    print('Calibrating Images to No of photons')
+    def calibrated_image(image, photon_energy):
+        ADU_per_electron = 1
+        bandgap = 3.1
+        cts_per_photon = ADU_per_electron*photon_energy/bandgap
+        return image/cts_per_photon
+    for i,g in enumerate(mes.good):
+        if g:
+            mes.images[i] = calibrated_image(mes.images[i],mes.E_cent)
+    
+    mes.avgim = np.mean(mes.images[mes.good],0)
 
     return mes
-
 
 def set_delbins(mes, Ddel = 0.06, t0_margin = 0.25, outputfile = None):
     mes.Ddel = Ddel
@@ -138,9 +160,9 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
     mes.image_offsets = np.mean(mes.images[:,beamblocked_pix[0]:beamblocked_pix[1],mes.image_cutoff],\
                                 (1,2))*mes.Nrows# In the beam block shadow
 
-    mes.all_spectra_raw = (np.sum(mes.images[:,:,mes.image_cutoff],2).T-mes.image_offsets.T).T /mes.binning
-    mes.all_spectra_raw[:,0] = 0 # Setting that buggy first line of pixels to 0
-    mes.all_spectra_raw = (mes.all_spectra_raw.T/lh.interp_nans(mes.gmd_hall)).T # Normalize by hall gmd
+    mes.all_spectra_raw = (np.sum(mes.images[:,:,mes.image_cutoff],2).T-mes.image_offsets.T).T #/mes.binning
+    #mes.all_spectra_raw[:,0] = 0 # Setting that buggy first line of pixels to 0
+    #mes.all_spectra_raw = (mes.all_spectra_raw.T/lh.interp_nans(mes.gmd_hall)).T # Normalize by hall gmd
     
     mes.stray_high = np.sum(mes.all_spectra_raw[:,last_pix[0]:last_pix[1]],1) # First pixels
     mes.stray_low = np.sum(mes.all_spectra_raw[:,first_pix[0]:first_pix[1]],1) # Last Pixels
@@ -151,7 +173,7 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
         plt.savefig(outputfile, format='pdf')
 
     ############## Event filtering here
-    
+    Nsigma_outlier = 2.5
     plt.figure()
     #plt.title('Event Filtering')
     ### High stry light region
@@ -161,8 +183,8 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
     plt.plot(np.arange(len(mes._ids))[mes.good],average_stray_high,'-',c='blue')
 
     sigma_stray_high = np.nanstd(mes.stray_high[mes.good]- average_stray_high)
-    stray_high_too_low = mes.stray_high[mes.good]< average_stray_high-2*sigma_stray_high#0.7*average_stray_high
-    stray_high_too_high = mes.stray_high[mes.good]> average_stray_high+2*sigma_stray_high#1.3*average_stray_high
+    stray_high_too_low = mes.stray_high[mes.good]< average_stray_high-Nsigma_outlier*sigma_stray_high#0.7*average_stray_high
+    stray_high_too_high = mes.stray_high[mes.good]> average_stray_high+Nsigma_outlier*sigma_stray_high#1.3*average_stray_high
     stray_high_bad = stray_high_too_low | stray_high_too_high
     plt.plot(np.arange(len(mes._ids))[mes.good][stray_high_bad],mes.stray_high[mes.good][stray_high_bad],'x',c='blue')
 
@@ -174,8 +196,8 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
     plt.plot(np.arange(len(mes._ids))[mes.good],average_stray_low,'-',c='red')
 
     sigma_stray_low = np.nanstd(mes.stray_low[mes.good]- average_stray_low)
-    stray_low_too_low = mes.stray_low[mes.good]< average_stray_low-2*sigma_stray_low#0.7*average_stray_low
-    stray_low_too_high = mes.stray_low[mes.good]> average_stray_low+2*sigma_stray_low#1.3*average_stray_low
+    stray_low_too_low = mes.stray_low[mes.good]< average_stray_low-Nsigma_outlier*sigma_stray_low#0.7*average_stray_low
+    stray_low_too_high = mes.stray_low[mes.good]> average_stray_low+Nsigma_outlier*sigma_stray_low#1.3*average_stray_low
     stray_low_bad = stray_low_too_high | stray_low_too_low
     plt.plot(np.arange(len(mes._ids))[mes.good][stray_low_bad],mes.stray_low[mes.good][stray_low_bad],'x',c='red')
 
@@ -188,8 +210,8 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
     plt.plot(np.arange(len(mes._ids))[mes.good],average_offset_variation-10,'-',c='green')
     
     offset_sigma = np.nanstd(offsets_variation[mes.good]-average_offset_variation)
-    offset_variation_too_low = offsets_variation[mes.good]< average_offset_variation-2*offset_sigma#3.7*mes.binning
-    offset_variation_too_high = offsets_variation[mes.good]> average_offset_variation+2*offset_sigma#3.7*mes.binning
+    offset_variation_too_low = offsets_variation[mes.good]< average_offset_variation-Nsigma_outlier*offset_sigma#3.7*mes.binning
+    offset_variation_too_high = offsets_variation[mes.good]> average_offset_variation+Nsigma_outlier*offset_sigma#3.7*mes.binning
     offset_variation_bad = offset_variation_too_low | offset_variation_too_high
 
     plt.plot(np.arange(len(mes._ids))[mes.good][offset_variation_bad],offsets_variation[mes.good][offset_variation_bad]-10,'x',c='green')
@@ -202,8 +224,8 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
 
     mes.good = temp
     
-    print(f'{200* np.sum(mes.good)/len(mes.good)}% of camera on events were classified as good.')
-    plt.title('Event Filtering:'+f'{200* np.sum(mes.good)/len(mes.good):.2f}% of camera on events were classified as good.')
+    print(f'{200* np.sum(mes.good)/len(mes.good)}% of non-empty images were classified as good.')
+    plt.title('Event Filtering:'+f'{200* np.sum(mes.good)/len(mes.good):.2f}% of non-empty images were classified as good.')
     plt.legend()
     #### Event filtering complete
     
@@ -212,9 +234,14 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
     mes.ccd_noise_spec_pix = mes.ccd_noise_pix/np.sqrt(mes.images[0,0,mes.image_cutoff].shape[0])# RMS Noise per pixel in spectrum
     
     #avgspec_raw = np.mean(mes.all_spectra_raw[mes.good&mes.unpumped_events],0)
-
     mes.all_spectra = ((mes.all_spectra_raw).T/mes.straylight.T).T # Normalize by stray light
-        
+    #mes.all_spectra = mes.all_spectra_raw
+
+    
+    ### Transmission correction
+    ld = np.load('T_sample_to_CCD.npy',allow_pickle=True).item()
+    mes.T_sample_to_CCD = np.interp(mes.enax,ld['E'],ld['T'])
+    mes.all_spectra = mes.all_spectra/mes.T_sample_to_CCD
 
     # Error derived from the average CCD noise and scaled as the signal was
     mes.all_spectra_err = mes.ccd_noise_spec_pix*(np.ones(mes.all_spectra.shape).T/mes.straylight.T).T
