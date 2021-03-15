@@ -113,7 +113,7 @@ def set_delbins(mes, Ddel = 0.06, t0_margin = 0.25, outputfile = None):
     mes.unpumped_events = (mes.delay>(mes.t0+t0_margin))|(mes.delay<(mes.t0-t0_margin))
     mes.delay = lh.interp_nans(mes.delay)
 
-    plt.figure(figsize =(6,5))
+    #plt.figure(figsize =(6,5))
     plt.plot(mes._ids[mes.good]-mes._ids[0],mes.delay[mes.good],'C1.-', lw = 0.2)
     plt.plot(mes._ids[mes.good&mes.unpumped_events]-mes._ids[0],mes.delay[mes.good&mes.unpumped_events],'C0.')
 
@@ -123,13 +123,19 @@ def set_delbins(mes, Ddel = 0.06, t0_margin = 0.25, outputfile = None):
     plt.xlabel('Event ID of Spectra')
     plt.tight_layout()
     
-    if outputfile is not None:
-        plt.savefig(outputfile, format='pdf')
+    #if outputfile is not None:
+    #    plt.savefig(outputfile, format='pdf')
     
-def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= None,  image_cutoff = None, outputfile = None):
+def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= None,  image_cutoff = None, outputfile = None, energy_differences = [-3.1,-1.55,1.55,3.1]):
     """
     returns event-based normalized spectra
     """
+    
+    ## Open Figure
+    fig, axes = plt.subplots(3,1,figsize=(6,6), constrained_layout=True)
+    plt.suptitle(f'Spectra normalization runs {mes._loaded_runs}')
+    
+    
     if beamblocked_pix is None:
         beamblocked_pix = mes.beamblocked_pix
     else:
@@ -149,7 +155,7 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
 
     mes.avgim_pumped = np.mean(mes.images[mes.good&np.logical_not(mes.unpumped_events)],0)
     B = mes.avgim_pumped.shape[1]
-    plt.figure()
+    plt.sca(axes[0])
     plt.plot(range(B),np.sum(mes.avgim_pumped,0),'-', label = 'all')
     plt.plot(np.arange(B)[mes.image_cutoff],np.sum(mes.avgim_pumped,0)[mes.image_cutoff],'.-',label = 'used')
     plt.legend()
@@ -169,12 +175,12 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
     mes.straylight = np.mean((mes.stray_low.T,mes.stray_high.T),0) # Average first and last
     mes.straylight = mes.straylight/np.mean(mes.straylight[mes.good])
     
-    if outputfile is not None:
-        plt.savefig(outputfile, format='pdf')
+    #if outputfile is not None:
+    #    plt.savefig(outputfile, format='pdf')
 
     ############## Event filtering here
     Nsigma_outlier = 2.5
-    plt.figure()
+    plt.sca(axes[1])
     #plt.title('Event Filtering')
     ### High stry light region
     plt.plot(np.arange(len(mes._ids))[mes.good],mes.stray_high[mes.good],'C0.', label ='stry high')
@@ -261,15 +267,15 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
     mes.all_spectra_ppdiff,mes.all_spectra_ppdiff_err =  \
             difference_with_error(mes.all_spectra,mes.avgspec,mes.all_spectra_err,mes.avgspec_err)
     
-    if outputfile is not None:
-        plt.savefig(outputfile, format='pdf')
+    #if outputfile is not None:
+    #    plt.savefig(outputfile, format='pdf')
 
-    plt.figure()
+    plt.sca(axes[2])
     
     # Over Energy
     plt.plot(mes.enax,mes.avgspec)
     plt.axvline(mes.E_cent, ls='-')
-    for e in [-3.1,-1.55,1.55,3.1]:
+    for e in energy_differences:
         plt.axvline(mes.E_cent+e, ls=':')
         
     # Over pixels
@@ -285,3 +291,85 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
     
     if outputfile is not None:
         plt.savefig(outputfile, format='pdf')
+        
+def timelineout(mes, emin, emax, lab= None, col = None):
+    window = np.logical_and(mes.enax<=emax,mes.enax>emin)
+    x = mes.delbin_mids - mes.t0
+    y = np.nansum(mes.delmap_ppdiff_masked[window,:],0)
+    yerr = np.sqrt(np.nansum(mes.delmap_ppdiff_err_masked[window,:]**2,0))#/np.sqrt(np.sum(window))
+    #yerr = np.std(mes.delmap_ppdiff[window,:],0)*np.sqrt(np.sum(window))
+    if np.isnan(np.nanmean(y)):
+        print('Delay trace of nans! Check delay window.')
+    plt.errorbar(x,y,2*yerr, label = lab, color = col, elinewidth=0.5, capsize = 2)
+    lh.fancy_errplot(plt.gca(), x, y, 2*yerr, 0.03, color=col)
+    plt.xlabel('Delay / ps')
+    #plt.title('E = {} eV, Runs {}'.format(np.round(lh.nm2eV(np.nanmean(mes.mono)),2), mes._loaded_runs))
+    mes.deltraces[lab] = y
+    
+    time_lineout = {
+        "delax": x,
+        "trace": y,
+        "trace_std": yerr,
+        "emin": emin,
+        "emax": emax,
+        "boolean_window": window
+        }
+    #setattr(mes,f'time_lineout_{1000*(emin+emax)/2:.0f}meV', time_lineout)
+    return time_lineout
+
+def relevant_lineouts_const_E(mes, FELen, width = 0.75, specax = False,diffs = None):
+    cols = ['C0','C1','C2','C3','C5']
+    if diffs is None:
+        diffs = [-3.1,-1.55,1.55,3.1]
+    w = width/2
+    specax.axvline(FELen, color = 'k')
+    mes.deltraces = {}
+    for i,d in enumerate(diffs):
+        emin = FELen+d-w
+        emax = FELen+d+w
+        tlo = timelineout(mes, emin, emax, lab= 'E = {} eV'.format(FELen+d), col = cols[i])
+        setattr(mes,f'time_lineout_{i}', tlo)
+        
+        if type(specax) is type(plt.gca()):
+            specax.axvspan(emin,emax, color = cols[i], alpha = 0.3)
+    plt.legend()
+
+def speclineout(mes, tmin, tmax, lab= None):
+    window = np.logical_and(mes.delbin_mids<=tmax,mes.delbin_mids>tmin)
+
+    x = mes.enax
+    y = np.nansum(mes.delmap_ppdiff_masked[:,window],1)
+    yerr = np.sqrt(np.nansum(mes.delmap_ppdiff_err_masked[:,window]**2,1))#/np.sqrt(np.sum(window))
+
+    if np.isnan(np.nanmean(y)):
+        print('Delay trace of nans! Check delay window.')
+        
+    #plt.errorbar(x,y,2*yerr, label = lab, elinewidth=0.5, capsize = 2, color = 'C1')
+    lh.fancy_errplot(plt.gca(), x, y, 2*yerr, 0.03, color='C5',lab = lab)
+    plt.plot(x,lh.smooth(y, int(np.round(30/mes.binning))),c="C1")
+    plt.xlabel('Delay / ps')
+    #plt.title('E = {} eV, Runs {}'.format(np.round(lh.nm2eV(np.nanmean(mes.mono)),2), mes._loaded_runs))
+    mes.deltraces[lab] = y
+    
+    spectrum_lineout = {
+        "enax": mes.enax,
+        "spec": y,
+        "spec_std": yerr,
+        "tmin": tmin,
+        "tmax": tmax,
+        "window": window
+        }
+    return spectrum_lineout
+    #setattr(mes,f'spectrum_lineout', spectrum_lineout)
+    
+def relevant_lineouts_const_t(mes, t0 , width = 0.75, specax = False):
+    w = width/2
+    #specax.axvline(t0, color = 'k')
+    mes.deltraces = {}
+    tmin = t0-w
+    tmax = t0+w
+    mes.spectrum_lineout = speclineout(mes, tmin, tmax, lab= 't = {}'.format(t0))
+    if type(specax) is type(plt.gca()):
+        specax.axhspan(tmin-mes.t0,tmax-mes.t0,  alpha = 0.3, color='C5')
+    plt.legend()
+    

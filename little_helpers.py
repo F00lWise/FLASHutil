@@ -16,12 +16,14 @@ def strip(lst):
      lst = [([4,],),]
      strip(lst)
      >> 4"""
+    if len(lst)< 1:
+        return np.nan
     assert len(lst)==1, 'strip function requires single values in all sublists/tuples'
     content = lst[0]
     if type(content) in (list,tuple):
         content = strip(content)
     return content
-    
+
 def midpoints(x):
     """return (x[1:] + x[:-1])/ 2
     Returns the middle values between the input vector valus.
