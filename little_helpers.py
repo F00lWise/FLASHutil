@@ -46,8 +46,37 @@ def normsum(X):
 
 def gaussian_topnmorm(x, mu, sig):
     return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+
 def gaussian(x, mu, sig):
     return (1/np.sqrt(2*np.pi*sig**2))*np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+
+def lorentzian_topnorm(x,mu, gamma):
+    """
+    Loretzian peak function,
+    centered around mu,
+    half-with of gamma (FWHM = 2*gamma)
+    Amplitude equals 1
+    """
+    denom = 1 + ((x-mu)/gamma)**2
+    return 1 / denom
+
+def lorentzian(x,mu, gamma):
+    """
+    Loretzian peak function,
+    centered around mu,
+    half-with of gamma (FWHM = 2*gamma)
+    Integral equals 1
+    """
+    denom = 1 + ((x-mu)/gamma)**2
+    return 1 / (denom*np.pi*gamma)
+
+
+def erf(x,mu,sigma):
+    """
+    returns the error function scipy.special.erf scaled such that
+    its derivative corresponds to a gaussian with the same sigma and my
+    """
+    return (1+scipy.special.erf((x-mu)/(np.sqrt(2)*sigma)))/2
 
 def spectral_weight(x,y):
     y = y/np.nansum(y)
