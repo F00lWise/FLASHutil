@@ -5,7 +5,7 @@ import scipy as sc
 import scipy.ndimage
 import scipy.signal
 from scipy.signal import butter, filtfilt, freqz
-
+import astropy.convolution
 import copy
 
 
@@ -38,16 +38,20 @@ def edgepoints(middles):
     return edges
 
 def normmax(X):
+    """ Normalize X between Min and Max"""
     X = X-np.nanmin(X)
     return X/np.nanmax(X)
 def normsum(X):
+    """ Normalize X between Min and Sum"""
     X = X-np.nanmin(X)
     return X/np.nansum(X)
 
 def gaussian_topnmorm(x, mu, sig):
+    """ Gaussian, normalized to peak"""
     return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
 def gaussian(x, mu, sig):
+    """ Gaussian, normalized to integral"""
     return (1/np.sqrt(2*np.pi*sig**2))*np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
 def lorentzian_topnorm(x,mu, gamma):
@@ -79,21 +83,25 @@ def erf(x,mu,sigma):
     return (1+scipy.special.erf((x-mu)/(np.sqrt(2)*sigma)))/2
 
 def spectral_weight(x,y):
+    """First moment of distribution y over x"""
     y = y/np.nansum(y)
     return np.nansum(x*y)
 def spectral_variance(x,y):
+    """Second moment of distribution y over x"""
     y = y/np.nansum(y)
     weight = spectral_weight(x,y)
     return np.nansum(y*(x-weight)**2)
 
 import resource
 def memory_used(point=""):
+    """Memory used overall or by passed variable."""
     usage=resource.getrusage(resource.RUSAGE_SELF)
     return '''%s: usertime=%s systime=%s mem=%s mb
            '''%(point,usage[0],usage[1],
                 usage[2]/1024.0 )
 
 def binn_vector(vec, factor):
+    """Binns a vector by a given factor"""
     uneven = np.mod(len(vec),factor)>0
     Lout = int(np.floor(len(vec)/factor))+uneven
     binned = np.empty(Lout)
@@ -199,6 +207,7 @@ def fft_shifted(x, Fs):
     return freq_Hz, X
 
 def addpatch(patch,axes):
+    """adds patch to axes"""
     cp = copy(patch)
     cp.axes = None
     cp.figure = None
@@ -632,7 +641,7 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
     
     This function masks outliers in a given 3D array <image_stack> with images in dimensions (1,2).
     This is done by comparing each image with its smoothed counterpart.
-    Smoothing is done by convoluting with a box function with a kernel of <kernel_size>
+    Smoothing is done by convoluting with a Gaussian function with a kernel of <kernel_size>
     Outliers that deviate more than <Nsigma> from the smoothed version are  masked.
     Regions outside of the <roi> (2D, valid for each image) are disregarded and never masked
     As this algorithm can fail around regions with high intensities (e.g. elastic peaks),\
@@ -662,7 +671,8 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
     roi_excluded_region = np.ones((image_stack.shape[1],image_stack.shape[2]),dtype = bool)
     roi_excluded_region[roi] = False
     
-    kernel = np.ones(kernel_size)
+    kernel = astropy.convolution.Gaussian2DKernel(*kernel_size)    
+    
     if Nsigma_average is None:
         Nsigma_average = Nsigma/3
 
@@ -673,7 +683,9 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
             nanmask = np.isnan(image)
             avg = np.nanmedian(image)
             image[nanmask] = avg
-        im_sm = sc.ndimage.uniform_filter(np.array(image,dtype=float),size=kernel_size, mode = 'nearest')
+        #im_sm = sc.ndimage.uniform_filter(np.array(image,dtype=float),size=kernel_size, mode = 'nearest')
+        im_sm = astropy.convolution.convolve(np.array(image,dtype=float), kernel, boundary='extend')
+
         diff = np.abs(image - im_sm)
         deviation = np.nanstd(diff)
         hits = diff>Nsigma*deviation
@@ -699,8 +711,10 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
         excluded_region = roi_excluded_region
     else:
         peak_excluded_region_raw = mask_image(avgim,kernel = kernel, Nsigma = Nsigma_average, excluded_region= roi_excluded_region)
+
         ## Smooth the peak excluded region with the kernel
-        peak_excluded_region_sm = sc.ndimage.convolve(np.array(peak_excluded_region_raw,dtype=float), kernel, mode = 'nearest')
+        #peak_excluded_region_sm = sc.ndimage.convolve(np.array(peak_excluded_region_raw,dtype=float), kernel, mode = 'nearest')
+        peak_excluded_region_sm = astropy.convolution.convolve(np.array(peak_excluded_region_raw,dtype=float), kernel, boundary='extend')
         peak_excluded_region = peak_excluded_region_sm>(3/np.nansum(kernel)) # more than 3 pixel within the kernel triggered in the avgim
         excluded_region = peak_excluded_region | roi_excluded_region
     
