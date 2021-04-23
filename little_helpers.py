@@ -294,8 +294,28 @@ def oversample2d(image, oversampling, kind = 'cubic'):
     f = scipy.interpolate.interp2d(xax, yax, image, kind = kind)
     return  f(x2, y2)
 
-def match_spectra(v1,v2, oversample = 10, return_shifted = False, return_oversampled = False, plot = False):
-    ## Oversample both vectors. Pad in fourier domain to avoid overshoots
+def interp1d(x, xp, fp, kind = 'linear', fill_value = np.nan):
+    """ Signature: interp1d(x, xp, fp, kind = 'linear', fill_value = np.nan)
+    This function replicates the way np.interp works, but allows different kinds of interpolation, e.g. cubic 
+    """
+    f = sc.interpolate.interp1d(xp,fp,kind=kind,fill_value=fill_value)
+    return f(x)
+def match_spectra(v1,v2, x1=None, x2=None,oversample = 10, return_shifted = False, plot = False):
+    """
+    match_spectra(v1,v2, x1=None, x2=None,oversample = 10, return_shifted = False, plot = False)
+    
+    
+    Return logic:
+        if return_shifted and xaxes_given:
+            return shifto/oversample,dx1*shifto/oversample, v1, v2_shifted
+        elif return_shifted and not xaxes_given:
+            return shifto/oversample, v1, v2_shifted
+        elif not return_shifted and xaxes_given:
+            return shifto/oversample,dx1*shifto/oversample
+        elif not return_shifted and not xaxes_given:
+            return shifto/oversample
+    """
+    ## Oversample both vectors. Filter in fourier domain to avoid overshoots
     # NaN handling only implemented
     L1 = len(v1)
     L2 = len(v2)
@@ -306,35 +326,59 @@ def match_spectra(v1,v2, oversample = 10, return_shifted = False, return_oversam
         v1 = interp_nans(v1)
         v2 = interp_nans(v2)
 
-    vo1 = sc.signal.resample(v1,L1*oversample,window = ('gaussian',L1/3))
-    vo2 = sc.signal.resample(v2,L2*oversample,window = ('gaussian',L1/3))
+    ## handle x-axes
+    xaxes_given = (x1 is not None) and (x2 is not None)
+    if not xaxes_given:
+        assert x1 is None, 'If one axis is given, I need both x1 and x2'
+        assert x2 is None, 'If one axis is given, I need both x1 and x2'
+        #fake axes for plots etc
+        x1 = np.arange(L1)
+        x2 = np.arange(L2)
+        xo = np.arange(L1*oversample)/oversample
+    else:
+        xmin = np.min([np.nanmin(x1),np.nanmin(x2)])
+        xmax = np.max([np.nanmax(x1),np.nanmax(x2)])
+        dx1 = np.mean(x1[1:]-x1[:-1])
+        dx2 = np.mean(x2[1:]-x2[:-1])
+        if not dx1 == dx2: print(f'Warning: dx1={dx1} and dx2={dx2} differ. Oversamplping relates to dx1.')
 
-    if plot:
-        plt.figure()
-        plt.plot(np.arange(L1),v1,'.-', ms=2,label = 'v1 original')
-        plt.plot(np.arange(L1),v2,'.-', ms=2,label = 'v2 original')
-        plt.plot(np.arange(L1*oversample)/oversample,vo1,'C0.', ms=2,label = 'v1 oversampled')
-        plt.plot(np.arange(L1*oversample)/oversample,vo2,'C1.', ms=2,label = 'v2 oversampled')
-        ax1 = plt.gca()
-        plt.legend()
+        x1o= np.linspace(np.nanmin(x1), np.nanmax(x1),L1*oversample)
+        x2o= np.linspace(np.nanmin(x2), np.nanmax(x2),L2*oversample)
+        x  = np.arange(xmin, xmax+dx1,dx1)            # This is the common x axis.
+        xo = np.arange(xmin, xmax+dx1,dx1/oversample) # This is the common, oversampled x axis.
+    
+    # Oversampling. If x-axes were specified, it is done over the common axis
+    #vo1 = sc.signal.resample(v1,L1*oversample,window = ('gaussian',L1/2))
+    #vo2 = sc.signal.resample(v2,L2*oversample,window = ('gaussian',L2/2))
+    # I am changing to cubic interpolation - creates less artifacts
+    vo1 = interp1d(x1o,x1,v1,kind='cubic')
+    vo2 = interp1d(x2o,x2,v2,kind='cubic')
+
+    if xaxes_given:
+        vo1 = np.interp(xo,x1o,vo1,left=np.nanmean(vo1),right=np.nanmean(vo1))
+        vo2 = np.interp(xo,x2o,vo2,left=np.nanmean(vo2),right=np.nanmean(vo2))
+
     ## Determine exact shift
     corr,shifts = correlate(vo1,vo2) 
     shifto = shifts[np.argmax(corr)]
-
-
+    
+    if plot:
+        plt.figure()
+        plt.plot(x1,v1,'.-', ms=2,label = 'v1 original')
+        plt.plot(x2,v2,'.-', ms=2,label = 'v2 original')
+        plt.plot(xo,vo1,'C0.', ms=2,label = 'v1 oversampled')
+        plt.plot(xo,vo2,'C1.', ms=2,label = 'v2 oversampled')
+        ax1 = plt.gca()
+        plt.legend()
+        
     ## shift v2 to match v1 and return
     if return_shifted:
         vo2_shifted = shift_by_n(vo2,shifto)
         
-        if plot:
-            ax1.plot(np.arange(L1*oversample)/oversample,vo2_shifted, label = 'vo2 shifted to match v1') 
-            plt.legend()
-            
-        if return_oversampled:
-            return shifto/oversample, vo1, vo2_shifted
-        
-                                   
-        v2_shifted = sc.signal.resample(interp_nans(vo2_shifted),L2)
+        if xaxes_given:
+            v2_shifted = np.interp(x2,xo,vo2_shifted)
+        else:
+            v2_shifted = sc.signal.resample(interp_nans(vo2_shifted),L2)
         
         if any(nans1):
             v1[nans1] = np.nan
@@ -344,11 +388,20 @@ def match_spectra(v1,v2, oversample = 10, return_shifted = False, return_oversam
             v2_shifted[nans2_shifted] = np.nan
                                    
         if plot:
-            ax1.plot(v2_shifted, ms=2,label = 'v2 shifted to match v1')
+            ax1.plot(xo,vo2_shifted, label = 'vo2 shifted to match v1') 
+            ax1.plot(x2,v2_shifted, ms=2,label = 'v2 shifted to match v1')
             plt.legend()
+            
+    ## returns
+    if return_shifted and xaxes_given:
+        return shifto/oversample,dx1*shifto/oversample, v1, v2_shifted
+    elif return_shifted and not xaxes_given:
         return shifto/oversample, v1, v2_shifted
-    else:
+    elif not return_shifted and xaxes_given:
+        return shifto/oversample,dx1*shifto/oversample
+    elif not return_shifted and not xaxes_given:
         return shifto/oversample
+
     
 def detect_peaks(image):
     """
