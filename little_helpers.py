@@ -144,8 +144,8 @@ def shift_by_n(vec,n):
         raise ValueError('Invalid n.')
     return res
 
-def shift_by_delta(y, sft,x = None, oversampling=10):
-    """ Shift a vector by any distance, with a precidion of <oversampling>
+def shift_by_delta(y, sft,x = None, oversampling=10, mask_extrapolated_data=True):
+    """Shift a vector by any distance, with a precidion of <oversampling>
      compared to the current sampling,
      optionally on an axis x."""
     L = len(y)
@@ -155,7 +155,7 @@ def shift_by_delta(y, sft,x = None, oversampling=10):
         
     if x is None:
         x = np.arange(L)
-    yo, xo = sc.signal.resample(y,L*oversampling,t=x, window = ('gaussian',L/2))
+    yo, xo = sc.signal.resample(y,L*oversampling,t=x, window = ('gaussian',L/4))
     
     dx = np.mean(x[1:]-x[:-1])
     #print(sft,dx)
@@ -163,7 +163,12 @@ def shift_by_delta(y, sft,x = None, oversampling=10):
     #print(sft/dx)
     yo_shifted = shift_by_n(yo,shifto)
     y_shifted = sc.signal.resample(interp_nans(yo_shifted),L)
-    
+    if mask_extrapolated_data:
+        if sft<0:
+            y_shifted[int(np.floor(sft)):] = np.nan
+        elif sft>0:
+            y_shifted[:int(np.ceil(sft))] = np.nan
+            
     if any(nans):
         nans_shifted = interp_nans(shift_by_n(nans,int(np.round(shifto/oversampling)))==1)
         y_shifted[nans_shifted] = np.nan
@@ -671,8 +676,8 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
     roi_excluded_region = np.ones((image_stack.shape[1],image_stack.shape[2]),dtype = bool)
     roi_excluded_region[roi] = False
     
-    kernel = astropy.convolution.Gaussian2DKernel(*kernel_size)    
-    
+    #kernel = astropy.convolution.Gaussian2DKernel(*kernel_size)    
+    kernel = np.ones(kernel_size)/(kernel_size[0]*kernel_size[1])
     if Nsigma_average is None:
         Nsigma_average = Nsigma/3
 
