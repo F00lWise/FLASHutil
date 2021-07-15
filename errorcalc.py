@@ -81,6 +81,10 @@ def log10_with_err(X,Xerr):
     return np.log10(X), logerr
 
 def ratio_with_error(x,y,xerr,yerr):
+    """ If this is used for binned data, I should really use the ratio_with_error_correlated_specific function
+    and pass the correlation of the data within each bin. This function on the other hand uses the correlation
+    of the binned data, which might not be the same. """
+    
     X = x.copy()
     Y = y.copy()
     XERR = xerr.copy()
