@@ -92,6 +92,17 @@ def smooth(y, pts):
     smoothed = np.convolve(y_padded, sgauss,'same')
     return smoothed[pts*2:-pts*2]
 
+def smooth_box(y, pts):
+    """smooth_box(y, pts) 
+    Box smooth function"""
+    box = np.ones(pts)/pts
+   
+    padding = np.ones(pts*2)
+    y_padded = np.concatenate((padding*y[0],y, padding*y[-1]))
+    
+    smoothed = np.convolve(y_padded, box,'same')
+    return smoothed[pts*2:-pts*2]
+
 def shift_by_n(vec,n):
     """ Shift a vector by an even number of elements """
     res = np.zeros(vec.shape)*np.nan
