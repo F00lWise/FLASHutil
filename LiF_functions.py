@@ -198,7 +198,9 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
     ### Low stary light region
     plt.plot(np.arange(len(mes._ids))[mes.good],mes.stray_low[mes.good],'C1.', label ='stry low')
 
-    average_stray_low = lh.smooth(mes.stray_low[mes.good],50)
+    #average_stray_low = lh.smooth(mes.stray_low[mes.good],50)
+    average_stray_low = lh.smooth_box(mes.stray_low[mes.good],50)
+
     plt.plot(np.arange(len(mes._ids))[mes.good],average_stray_low,'-',c='red')
 
     sigma_stray_low = np.nanstd(mes.stray_low[mes.good]- average_stray_low)
@@ -212,7 +214,9 @@ def normalize_spectra(mes, beamblocked_pix= None, first_pix = None,last_pix= Non
     offsets_variation = mes.image_offsets-np.nanmean(mes.image_offsets[mes.good])
     plt.plot(np.arange(len(mes._ids))[mes.good],offsets_variation[mes.good]-10,'C2.', label ='stray offset')
 
-    average_offset_variation = lh.smooth(offsets_variation[mes.good],50)
+    #average_offset_variation = lh.smooth(offsets_variation[mes.good],50)
+    average_offset_variation = lh.smooth_box(offsets_variation[mes.good],50)
+
     plt.plot(np.arange(len(mes._ids))[mes.good],average_offset_variation-10,'-',c='green')
     
     offset_sigma = np.nanstd(offsets_variation[mes.good]-average_offset_variation)
@@ -373,3 +377,49 @@ def relevant_lineouts_const_t(mes, t0 , width = 0.75, specax = False):
         specax.axhspan(tmin-mes.t0,tmax-mes.t0,  alpha = 0.3, color='C5')
     plt.legend()
     
+def fit_timelineout(tlo):
+    import lmfit
+    from lmfit.models import GaussianModel
+    
+    # Define fit parameters
+    prefix = 'gauss_'
+    pars = lmfit.Parameters()      #### Hard Coded!
+    pars.add(prefix+'center', value=0, min = -0.15, max = 0.15)
+    pars.add(prefix+'fwhm', value=0.180, vary = False) # Fixed Sigma!
+    pars.add(prefix+'sigma', expr = f'{prefix}fwhm / 2.3548200')
+    pars.add(prefix+'amplitude', 300, min = None, max = None)
+    pars.add(prefix+'height', expr = f'0.3989423*{prefix}amplitude/max(1.e-15, {prefix}sigma)')
+             
+    # Restrict delay range
+    xlims = -0.5, 0.5              #### Hard Coded!
+    x = tlo["delax"]
+    xrange = (x>xlims[0])&(x<xlims[1])
+    x = x[xrange]
+    y = tlo["trace"][xrange]
+    yerr = tlo["trace_std"][xrange]
+
+    # Fit
+    mod = GaussianModel(prefix = prefix)
+    try:
+        res = mod.fit(y,x=x, weights=1/yerr**2, params = pars)
+        amplitude = res.result.params['gauss_height'].value
+        amplitude_std = res.result.params['gauss_height'].stderr
+        FWHM = res.result.params['gauss_fwhm'].value
+        FWHM_std = res.result.params['gauss_fwhm'].stderr
+        print(res.fit_report())
+        
+        t0 = res.result.params['gauss_center'].value
+        if np.abs(t0)> 1.4:
+            print(f'WARNING!!!!!!! Check if t0 was set correctly in this run! Fit resultet in t0 = {t0} !!!!!!!!!!!!!!!!')
+        fit = res.best_fit
+    except ValueError: # In case of no data (array contins nans)
+        amplitude = np.nan
+        amplitude_std = np.nan
+        FWHM = np.nan
+        FWHM_std = np.nan
+        fit = np.zeros(len(x))
+    if FWHM_std is None:
+        FWHM_std = np.nan
+    if amplitude_std is None:
+        amplitude_std = np.nan
+    return x, fit, amplitude, amplitude_std, FWHM, FWHM_std
