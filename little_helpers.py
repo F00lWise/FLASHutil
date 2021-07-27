@@ -5,10 +5,26 @@ import scipy as sc
 import scipy.ndimage
 import scipy.signal
 from scipy.signal import butter, filtfilt, freqz
-import astropy.convolution
 import copy
 
 
+def nm2eV(nm):
+    wl = nm/1e9
+    c = 299792458
+    nu = c/wl
+    E = 4.13566769692386e-15*nu    
+    return E
+def eV2nm(eV):
+    nu = eV/4.13566769692386e-15
+    c = 299792458
+    wl = c/nu
+    return wl*1e9
+
+def rad2deg(rad):
+    return rad * 180/np.pi
+def deg2rad(deg):
+    return deg * np.pi /180
+            
 def strip(lst):
     """Takes a list or tuple with just one value.
      Returns the value, even if packed in multpiple single-tuples or lists.
@@ -229,18 +245,6 @@ def within(a, inter):
     intersort = np.sort(inter)
     a = np.array(a)
     return (a>=intersort[0])&(a<intersort[1])
-    
-def nm2eV(nm):
-    wl = nm/1e9
-    c = 299792458
-    nu = c/wl
-    E = 4.13566769692386e-15*nu    
-    return E
-def eV2nm(eV):
-    nu = eV/4.13566769692386e-15
-    c = 299792458
-    wl = c/nu
-    return wl*1e9
 
 def save_dict_to_txt(fname, lib, header = None):
     # Saves a dictionary of 1d arrays of the same size to a txt file
@@ -300,10 +304,10 @@ def interp1d(x, xp, fp, kind = 'linear', fill_value = np.nan):
     """
     f = sc.interpolate.interp1d(xp,fp,kind=kind,fill_value=fill_value)
     return f(x)
+
 def match_spectra(v1,v2, x1=None, x2=None,oversample = 10, return_shifted = False, plot = False):
     """
     match_spectra(v1,v2, x1=None, x2=None,oversample = 10, return_shifted = False, plot = False)
-    
     
     Return logic:
         if return_shifted and xaxes_given:
@@ -334,7 +338,9 @@ def match_spectra(v1,v2, x1=None, x2=None,oversample = 10, return_shifted = Fals
         #fake axes for plots etc
         x1 = np.arange(L1)
         x2 = np.arange(L2)
-        xo = np.arange(L1*oversample)/oversample
+        x1o = np.arange(L1*oversample)/oversample
+        x2o = np.arange(L2*oversample)/oversample
+        xo = x1o
     else:
         xmin = np.min([np.nanmin(x1),np.nanmin(x2)])
         xmax = np.max([np.nanmax(x1),np.nanmax(x2)])
@@ -351,8 +357,8 @@ def match_spectra(v1,v2, x1=None, x2=None,oversample = 10, return_shifted = Fals
     #vo1 = sc.signal.resample(v1,L1*oversample,window = ('gaussian',L1/2))
     #vo2 = sc.signal.resample(v2,L2*oversample,window = ('gaussian',L2/2))
     # I am changing to cubic interpolation - creates less artifacts
-    vo1 = interp1d(x1o,x1,v1,kind='cubic')
-    vo2 = interp1d(x2o,x2,v2,kind='cubic')
+    vo1 = interp1d(x1o,x1,v1,kind='cubic',fill_value='extrapolate')
+    vo2 = interp1d(x2o,x2,v2,kind='cubic',fill_value='extrapolate')
 
     if xaxes_given:
         vo1 = np.interp(xo,x1o,vo1,left=np.nanmean(vo1),right=np.nanmean(vo1))
@@ -721,6 +727,9 @@ def cosmics_masking(image_stack, kernel_size = (3,1), Nsigma = 10, roi = np.s_[:
         excluded_region: Mask of what the algorithm disregarded (2D boolean array)
         hitlist: indices of all images where cosmics were found (1D np.array)
     """
+    import astropy.convolution
+
+    
     print(f'Begin Cosmic masking.')
     
     non_empty = np.any(image_stack,(1,2))
