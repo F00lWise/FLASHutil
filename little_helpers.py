@@ -6,6 +6,7 @@ import scipy.ndimage
 import scipy.signal
 from scipy.signal import butter, filtfilt, freqz
 import copy
+import resource
 
 
 def nm2eV(nm):
@@ -90,6 +91,12 @@ def lorentzian(x,mu, gamma):
     denom = 1 + ((x-mu)/gamma)**2
     return 1 / (denom*np.pi*gamma)
 
+def pseudo_voigt_topnorm(x,mu,sig, eta):
+    """
+    sigma is both the sigma of the gaussian and the gamma of the lorentzian.
+    eta is the share of the lorentzian, 1-eta the gaussian
+    """
+    return (eta*lorentzian_topnorm(x,mu,sig))+(1-eta)*gaussian_topnmorm(x,mu,sig)
 
 def erf(x,mu,sigma):
     """
@@ -108,7 +115,6 @@ def spectral_variance(x,y):
     weight = spectral_weight(x,y)
     return np.nansum(y*(x-weight)**2)
 
-import resource
 def memory_used(point=""):
     """Memory used overall or by passed variable."""
     usage=resource.getrusage(resource.RUSAGE_SELF)
